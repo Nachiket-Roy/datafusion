@@ -613,6 +613,14 @@ impl MemTable {
         on: Expr,
         clauses: Vec<MergeIntoClause>,
     ) -> Result<Arc<dyn ExecutionPlan>> {
+        let target_num_cols = self.schema.fields().len();
+        let target_schema_ref = Arc::clone(&self.schema);
+
+        // Helper to extract equi-join column indices from `on`
+        let equi_keys = extract_equi_join_keys(&on, &merge_schema, target_num_cols)?;
+        let target_key_indices: Vec<usize> = equi_keys.iter().map(|(t, _)| *t).collect();
+        let source_key_indices: Vec<usize> = equi_keys.iter().map(|(_, s)| *s).collect();
+
         // Collect source batches
         let source_batches = collect(source, state.task_ctx()).await?;
         let total_source_rows: usize = source_batches.iter().map(|b| b.num_rows()).sum();
@@ -627,14 +635,6 @@ impl MemTable {
         }
 
         *self.sort_order.lock() = vec![];
-
-        let target_num_cols = self.schema.fields().len();
-        let target_schema_ref = Arc::clone(&self.schema);
-
-        // Helper to extract equi-join column indices from `on`
-        let equi_keys = extract_equi_join_keys(&on, &merge_schema, target_num_cols)?;
-        let target_key_indices: Vec<usize> = equi_keys.iter().map(|(t, _)| *t).collect();
-        let source_key_indices: Vec<usize> = equi_keys.iter().map(|(_, s)| *s).collect();
 
         // Build target hash index across all partitions:
         // Key -> (partition_idx, batch_idx, row_idx)
@@ -1106,8 +1106,8 @@ fn extract_equi_join_keys(
     let mut pairs = Vec::new();
     collect_equi_keys(on, merge_schema, target_num_cols, &mut pairs)?;
     if pairs.is_empty() {
-        return plan_err!(
-            "MemTable MERGE INTO requires at least one equi-join condition in ON clause"
+        return not_impl_err!(
+            "MERGE INTO not supported for Base table: requires at least one equi-join condition in ON clause"
         );
     }
     Ok(pairs)
@@ -1160,22 +1160,22 @@ fn collect_equi_keys(
                         pairs.push((idx2, idx1 - target_num_cols));
                         Ok(())
                     } else {
-                        plan_err!(
-                            "ON equality condition must compare a target column with a source column: {expr}"
+                        not_impl_err!(
+                            "MERGE INTO not supported for Base table: ON equality condition must compare a target column with a source column: {expr}"
                         )
                     }
                 } else {
-                    plan_err!(
-                        "MemTable MERGE INTO requires column equality conditions in ON clause, found: {expr}"
+                    not_impl_err!(
+                        "MERGE INTO not supported for Base table: requires column equality conditions in ON clause, found: {expr}"
                     )
                 }
             }
-            _ => plan_err!(
-                "MemTable MERGE INTO only supports AND and EQ in ON condition, found: {expr}"
+            _ => not_impl_err!(
+                "MERGE INTO not supported for Base table: only supports AND and EQ in ON condition, found: {expr}"
             ),
         },
-        _ => plan_err!(
-            "MemTable MERGE INTO requires binary equality expressions in ON condition, found: {expr}"
+        _ => not_impl_err!(
+            "MERGE INTO not supported for Base table: requires binary equality expressions in ON condition, found: {expr}"
         ),
     }
 }
