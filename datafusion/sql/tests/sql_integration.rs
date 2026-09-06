@@ -822,6 +822,38 @@ fn plan_insert_on_conflict_with_matching_pk() {
 }
 
 #[test]
+fn plan_insert_on_conflict_unqualified_multi_constraints() {
+    // Unqualified ON CONFLICT DO NOTHING infers the target from the first constraint (PrimaryKey(id))
+    let sql = "INSERT INTO table_with_multi_constraints (id, email, name) VALUES (1, 'a@b.com', 'a') ON CONFLICT DO NOTHING";
+    let plan = logical_plan(sql).unwrap();
+    assert_snapshot!(
+        plan,
+        @r#"
+    Dml: op=[MergeInto] table=[table_with_multi_constraints]
+      SubqueryAlias: excluded
+        Projection: column1 AS id, column2 AS email, column3 AS name
+          Values: (CAST(Int64(1) AS Int32), Utf8("a@b.com"), Utf8("a"))
+    "#
+    );
+}
+
+#[test]
+fn plan_insert_on_conflict_explicit_second_constraint() {
+    // Explicit target on the second constraint (Unique(email)) matches and plans successfully
+    let sql = "INSERT INTO table_with_multi_constraints (id, email, name) VALUES (1, 'a@b.com', 'a') ON CONFLICT (email) DO NOTHING";
+    let plan = logical_plan(sql).unwrap();
+    assert_snapshot!(
+        plan,
+        @r#"
+    Dml: op=[MergeInto] table=[table_with_multi_constraints]
+      SubqueryAlias: excluded
+        Projection: column1 AS id, column2 AS email, column3 AS name
+          Values: (CAST(Int64(1) AS Int32), Utf8("a@b.com"), Utf8("a"))
+    "#
+    );
+}
+
+#[test]
 fn plan_update() {
     let sql = "update person set last_name='Kay' where id=1";
     let plan = logical_plan(sql).unwrap();

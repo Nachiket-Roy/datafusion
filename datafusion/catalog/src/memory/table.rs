@@ -728,7 +728,8 @@ impl MemTable {
                 };
 
                 if let Some(target_loc) = target_match {
-                    if !matched_target_rows.insert(target_loc) {
+                    let already_matched = !matched_target_rows.insert(target_loc);
+                    if already_matched && matched_clause.is_some() {
                         return exec_err!(
                             "ON CONFLICT DO UPDATE command cannot affect row a second time"
                         );
@@ -1112,6 +1113,11 @@ fn extract_equi_join_keys(
     Ok(pairs)
 }
 
+/// Extracts a column reference from an expression, unwrapping aliases and casts.
+///
+/// Note: Unwrapping `Expr::Cast` assumes type-coercion casts inserted by the DataFusion planner
+/// preserve equi-join uniqueness semantics (e.g. natural type widening). A lossy or non-injective
+/// cast in a general MERGE ON condition could map distinct source values to the same key.
 fn extract_column(expr: &Expr) -> Option<&Column> {
     match expr {
         Expr::Column(c) => Some(c),

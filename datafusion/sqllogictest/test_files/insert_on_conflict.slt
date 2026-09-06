@@ -102,6 +102,21 @@ select * from users where id = 10;
 ----
 10 First 100
 
+# Pre-existing duplicate key hit twice in DO NOTHING: silently skips both
+statement ok
+insert into users values (10, 'Third', 300), (10, 'Fourth', 400)
+on conflict (id) do nothing;
+
+query ITI rowsort
+select * from users where id = 10;
+----
+10 First 100
+
+# Pre-existing duplicate key hit twice in DO UPDATE: errors as row cannot be affected second time
+statement error ON CONFLICT DO UPDATE command cannot affect row a second time
+insert into users values (10, 'Update1', 1), (10, 'Update2', 2)
+on conflict (id) do update set name = excluded.name;
+
 # Clean up users table
 statement ok
 drop table users;

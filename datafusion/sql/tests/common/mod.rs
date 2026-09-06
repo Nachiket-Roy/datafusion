@@ -289,6 +289,18 @@ impl ContextProvider for MockContextProvider {
                     Constraints::new_unverified(vec![Constraint::PrimaryKey(vec![0])]);
                 return Ok(Arc::new(EmptyTable::with_constraints(schema, constraints)));
             }
+            "table_with_multi_constraints" => {
+                let schema = Arc::new(Schema::new(vec![
+                    Field::new("id", DataType::Int32, false),
+                    Field::new("email", DataType::Utf8, false),
+                    Field::new("name", DataType::Utf8, false),
+                ]));
+                let constraints = Constraints::new_unverified(vec![
+                    Constraint::PrimaryKey(vec![0]),
+                    Constraint::Unique(vec![1]),
+                ]);
+                return Ok(Arc::new(EmptyTable::with_constraints(schema, constraints)));
+            }
             _ => plan_err!("No table named: {} found", name.table()),
         };
 

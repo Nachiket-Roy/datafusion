@@ -3016,8 +3016,15 @@ impl<S: ContextProvider> SqlToRel<'_, S> {
                         );
                     }
                     // For DO NOTHING without target:
-                    // If table has unique/PK constraints, infer from the first constraint;
-                    // otherwise, if no constraints exist, no conflict can occur -> normal insert.
+                    // Infer conflict target from the first declared Unique or PrimaryKey constraint.
+                    // Note: In PostgreSQL, an unqualified ON CONFLICT DO NOTHING (with no conflict target)
+                    // suppresses violations against *any* unique or exclusion constraint on the table.
+                    // In DataFusion, the operation is desugared into MERGE INTO, which joins on a single
+                    // conjunction of equi-join keys. Inferring the target from the first matching constraint
+                    // is a deliberate simplification for tables with unique/PK constraints; on tables with
+                    // multiple disjoint constraints, conflicts against constraints other than the first will
+                    // not be matched by this equi-join and may be rejected downstream by the table provider.
+                    // If no constraints exist on the table, no conflict can occur -> normal insert.
                     let inferred_target =
                         table_source.constraints().and_then(|constraints| {
                             constraints.iter().find_map(|c| match c {
